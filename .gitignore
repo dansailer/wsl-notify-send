@@ -1,7 +1,6 @@
 # Build and test artifacts
 notify-send.exe
 *.test
-bin/
 
 # Local tooling
 go.work
