@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  release:
+    types: [created]
+
+permissions: {}
+
+concurrency:
+  group: release-${{ github.event.release.id }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Validate release tag
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+            printf 'Unsupported release tag: %s\n' "$RELEASE_TAG" >&2
+            exit 1
+          fi
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          version: 2026.9.10
+          cache: true
+          github_token: ''
+
+      - name: Build Windows backend
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: mise run build-windows --version "$RELEASE_TAG"
+
+      - name: Package platform assets
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf dist
+          mkdir -p dist/linux-x64 dist/windows-x64
+
+          install -m 0755 bin/notify-send dist/linux-x64/notify-send
+          install -m 0755 notify-send.exe dist/linux-x64/notify-send.exe
+          tar -C dist/linux-x64 -czf notify-send-linux-x64.tar.gz notify-send notify-send.exe
+
+          install -m 0755 notify-send.exe dist/windows-x64/notify-send.exe
+          (cd dist/windows-x64 && python3 -m zipfile -c ../../notify-send-windows-x64.zip notify-send.exe)
+
+          sha256sum notify-send-linux-x64.tar.gz notify-send-windows-x64.zip > SHA256SUMS
+
+      - name: Attest release assets
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
+        with:
+          subject-path: |
+            notify-send-linux-x64.tar.gz
+            notify-send-windows-x64.zip
+
+      - name: Upload release assets
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" notify-send-linux-x64.tar.gz notify-send-windows-x64.zip SHA256SUMS

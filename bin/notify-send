@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prefer an explicit backend, then a companion executable from the same mise
+# install directory, and finally the imported Windows PATH.
+if [[ -n "${WSL_NOTIFY_SEND_EXE:-}" ]]; then
+	windows_binary="$WSL_NOTIFY_SEND_EXE"
+else
+	script_path="$(readlink -f "${BASH_SOURCE[0]}")"
+	companion="$(dirname "$script_path")/notify-send.exe"
+	if [[ -f "$companion" ]]; then
+		windows_binary="$companion"
+	else
+		windows_binary="$(command -v notify-send.exe || true)"
+	fi
+fi
+
+if [[ -z "$windows_binary" ]]; then
+	printf 'notify-send: Windows backend not found\n' >&2
+	printf 'Set WSL_NOTIFY_SEND_EXE to the path of notify-send.exe.\n' >&2
+	exit 127
+fi
+
+if [[ "${WSL_NOTIFY_SEND_DEBUG:-}" == "1" ]]; then
+	printf 'notify-send: invoking Windows backend %s\n' "$windows_binary" >&2
+fi
+
+convert_icon_path() {
+	local path="$1"
+
+	# Stock icon names are not filesystem paths. Convert only files that exist in WSL.
+	if [[ -e "$path" ]] && command -v wslpath >/dev/null 2>&1; then
+		wslpath -w "$path"
+	else
+		printf '%s' "$path"
+	fi
+}
+
+args=()
+convert_next=false
+for arg in "$@"; do
+	if "$convert_next"; then
+		args+=("$(convert_icon_path "$arg")")
+		convert_next=false
+		continue
+	fi
+
+	case "$arg" in
+		--icon|-i|--app-icon|-n)
+			args+=("$arg")
+			convert_next=true
+			;;
+		--icon=*)
+			args+=("--icon=$(convert_icon_path "${arg#--icon=}")")
+			;;
+		--app-icon=*)
+			args+=("--app-icon=$(convert_icon_path "${arg#--app-icon=}")")
+			;;
+		-i=*)
+			args+=("-i=$(convert_icon_path "${arg#-i=}")")
+			;;
+		-i?*)
+			args+=("-i$(convert_icon_path "${arg#-i}")")
+			;;
+		-n=*)
+			args+=("-n=$(convert_icon_path "${arg#-n=}")")
+			;;
+		-n?*)
+			args+=("-n$(convert_icon_path "${arg#-n}")")
+			;;
+		*)
+			args+=("$arg")
+			;;
+	esac
+done
+
+exec "$windows_binary" "${args[@]}"

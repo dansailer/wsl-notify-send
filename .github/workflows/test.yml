@@ -1,0 +1,83 @@
+name: Test
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'mise.toml'
+      - 'mise.lock'
+      - 'bin/**'
+      - 'assets/**'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - 'go.mod'
+      - 'go.sum'
+      - 'mise.toml'
+      - 'mise.lock'
+      - 'bin/**'
+      - 'assets/**'
+      - '.github/workflows/**'
+
+permissions: {}
+
+concurrency:
+  group: test-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022]
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          version: 2026.9.10
+          cache: ${{ github.event_name == 'push' }}
+          github_token: ''
+
+      - name: Run tests
+        run: mise run test
+
+      - name: Build Windows executable
+        if: matrix.os == 'windows-2022'
+        run: mise run build-windows
+
+      - name: Check Windows executable
+        if: matrix.os == 'windows-2022'
+        run: .\notify-send.exe --version
+
+  quality:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@c2a87611a18de5b3828c5652fe268e992400cb5c
+        with:
+          version: 2026.9.10
+          cache: ${{ github.event_name == 'push' }}
+          github_token: ''
+
+      - name: Run quality checks
+        run: mise run quality

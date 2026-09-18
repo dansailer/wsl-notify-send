@@ -1,0 +1,121 @@
+[tools]
+go = "1.26.8"
+ghalint = "1.5.6"
+golangci-lint = "2.13.2"
+lefthook = "2.1.12"
+
+[tasks.fmt]
+description = "Format Go source files"
+run = "go fmt ./..."
+
+[tasks.test]
+description = "Run Go tests"
+run = "go test ./..."
+
+[tasks.vet]
+description = "Run go vet"
+run = "go vet ./..."
+
+[tasks.lint]
+description = "Run the Go linter"
+run = "golangci-lint run"
+
+[tasks.actions-lint]
+description = "Lint GitHub Actions workflows"
+run = "ghalint run"
+
+[tasks.fmt-check]
+description = "Check Go formatting without changing files"
+run = 'test -z "$(gofmt -l .)"'
+
+[tasks.quality]
+description = "Run non-test quality checks"
+run = [
+  { tasks = ["fmt-check", "vet", "lint", "actions-lint"] },
+]
+
+[tasks.check]
+description = "Format and run all quality checks"
+run = [
+  { task = "fmt" },
+  { tasks = ["vet", "test", "lint", "actions-lint"] },
+]
+
+[tasks.build-windows]
+description = "Build the Windows notification backend"
+usage = '''
+flag "--version <version>" default="dev" help="version embedded in the executable"
+'''
+env = { GOOS = "windows", GOARCH = "amd64" }
+run = 'go build -ldflags "-X main.Version=${usage_version?}" -o notify-send.exe .'
+run_windows = 'go build -ldflags "-X main.Version=%usage_version%" -o notify-send.exe .'
+
+[tasks.release]
+description = "Create and publish a GitHub release"
+confirm = "Create and publish a new GitHub release?"
+usage = '''
+arg "<version>" help="release version without the leading v (for example, 1.2.3)"
+'''
+shell = "bash -c"
+run = '''
+set -euo pipefail
+
+version="${usage_version?}"
+if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]]; then
+  printf 'Unsupported release version: %s\n' "$version" >&2
+  exit 2
+fi
+
+if [[ -n "$(git status --porcelain)" ]]; then
+  printf 'Release requires a clean working tree\n' >&2
+  exit 1
+fi
+
+upstream="$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)"
+if [[ -z "$upstream" ]] || ! git merge-base --is-ancestor HEAD "$upstream"; then
+  printf 'Release commit must be pushed to its upstream branch\n' >&2
+  exit 1
+fi
+
+gh release create "v${version}" \
+  --target "$(git rev-parse HEAD)" \
+  --generate-notes \
+  --fail-on-no-commits
+'''
+
+[tasks.test-notification]
+description = "Build and send a mise-style WSL notification without installing"
+depends = ["build-windows"]
+shell = "bash -c"
+run = '''
+set -euo pipefail
+WSL_NOTIFY_SEND_EXE="{{ config_root }}/notify-send.exe" \
+  "{{ config_root }}/bin/notify-send" \
+  --app-name notify-send \
+  --urgency normal \
+  --icon "{{ config_root }}/assets/speech-bubble.png" \
+  -- "Test notification" "WSLInterop is working"
+'''
+
+[tasks.install-wsl]
+description = "Install the notify-send wrapper in the user PATH"
+shell = "bash -c"
+run = '''
+set -euo pipefail
+mkdir -p "$HOME/.local/bin"
+cp "{{ config_root }}/bin/notify-send" "$HOME/.local/bin/notify-send"
+chmod +x "$HOME/.local/bin/notify-send"
+'''
+
+[tasks.install-hooks]
+description = "Install Lefthook Git hooks"
+run = "lefthook install"
+
+[tasks.tidy]
+description = "Tidy Go module dependencies"
+run = "go mod tidy"
+
+[tasks.clean]
+description = "Remove build and smoke-test artifacts"
+run = "go clean; rm -f notify-send.exe"
+run_windows = "go clean && if exist notify-send.exe del /q notify-send.exe"
