@@ -2,7 +2,7 @@ name: Test
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main]
     paths:
       - '**.go'
       - 'go.mod'
@@ -11,6 +11,8 @@ on:
       - 'mise.lock'
       - 'bin/**'
       - 'assets/**'
+      - 'tests/**'
+      - '.github/dependabot.yml'
       - '.github/workflows/**'
   pull_request:
     branches: [main]
@@ -22,6 +24,8 @@ on:
       - 'mise.lock'
       - 'bin/**'
       - 'assets/**'
+      - 'tests/**'
+      - '.github/dependabot.yml'
       - '.github/workflows/**'
 
 permissions: {}
@@ -54,13 +58,23 @@ jobs:
       - name: Run tests
         run: mise run test
 
+      - name: Test WSL wrapper
+        if: matrix.os == 'ubuntu-24.04'
+        run: mise run test-wrapper
+
       - name: Build Windows executable
         if: matrix.os == 'windows-2022'
-        run: mise run build-windows
+        run: mise run build-windows --version "ci-${{ github.sha }}"
 
       - name: Check Windows executable
         if: matrix.os == 'windows-2022'
-        run: .\notify-send.exe --version
+        shell: pwsh
+        run: |
+          $expected = "notify-send ci-${{ github.sha }}"
+          $actual = (& .\notify-send.exe --version).Trim()
+          if ($actual -ne $expected) {
+            throw "version = '$actual', want '$expected'"
+          }
 
   quality:
     runs-on: ubuntu-24.04

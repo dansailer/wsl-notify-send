@@ -9,6 +9,10 @@ import (
 	"git.sr.ht/~jackmordaunt/go-toast"
 )
 
+var pushToast = func(notification *toast.Notification) error {
+	return notification.Push()
+}
+
 func sendWindowsNotification(request notificationRequest) error {
 	// Category, hints, actions, and D-Bus IDs are retained by the parser for
 	// CLI compatibility but have no equivalent in the Windows toast API used here.
@@ -22,7 +26,7 @@ func sendWindowsNotification(request notificationRequest) error {
 	}
 	defer cleanup()
 
-	notification := toast.Notification{
+	notification := &toast.Notification{
 		AppID: request.AppName,
 		Title: request.Summary,
 		Body:  request.Body,
@@ -41,7 +45,7 @@ func sendWindowsNotification(request notificationRequest) error {
 		notification.Audio = toast.Silent
 	}
 
-	if err := notification.Push(); err != nil {
+	if err := pushToast(notification); err != nil {
 		return fmt.Errorf("could not show Windows toast: %w", err)
 	}
 	// Give the Windows broker time to consume the staged image before cleanup.

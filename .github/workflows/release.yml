@@ -56,22 +56,26 @@ jobs:
 
           install -m 0755 bin/notify-send dist/linux-x64/notify-send
           install -m 0755 notify-send.exe dist/linux-x64/notify-send.exe
-          tar -C dist/linux-x64 -czf notify-send-linux-x64.tar.gz notify-send notify-send.exe
+          tar -C dist/linux-x64 -czf dist/notify-send-linux-x64.tar.gz notify-send notify-send.exe
 
           install -m 0755 notify-send.exe dist/windows-x64/notify-send.exe
-          (cd dist/windows-x64 && python3 -m zipfile -c ../../notify-send-windows-x64.zip notify-send.exe)
+          (cd dist/windows-x64 && python3 -m zipfile -c ../notify-send-windows-x64.zip notify-send.exe)
 
-          sha256sum notify-send-linux-x64.tar.gz notify-send-windows-x64.zip > SHA256SUMS
+          (
+            cd dist
+            sha256sum notify-send-linux-x64.tar.gz notify-send-windows-x64.zip > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
 
       - name: Attest release assets
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be
         with:
           subject-path: |
-            notify-send-linux-x64.tar.gz
-            notify-send-windows-x64.zip
+            dist/notify-send-linux-x64.tar.gz
+            dist/notify-send-windows-x64.zip
 
       - name: Upload release assets
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name }}
-        run: gh release upload "$RELEASE_TAG" notify-send-linux-x64.tar.gz notify-send-windows-x64.zip SHA256SUMS
+        run: gh release upload "$RELEASE_TAG" dist/notify-send-linux-x64.tar.gz dist/notify-send-windows-x64.zip dist/SHA256SUMS

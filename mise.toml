@@ -10,7 +10,11 @@ run = "go fmt ./..."
 
 [tasks.test]
 description = "Run Go tests"
-run = "go test ./..."
+run = "go test -mod=readonly ./..."
+
+[tasks.deps-check]
+description = "Verify Go module metadata and checksums"
+run = ["go mod verify", "go mod tidy -diff"]
 
 [tasks.vet]
 description = "Run go vet"
@@ -31,14 +35,14 @@ run = 'test -z "$(gofmt -l .)"'
 [tasks.quality]
 description = "Run non-test quality checks"
 run = [
-  { tasks = ["fmt-check", "vet", "lint", "actions-lint"] },
+  { tasks = ["fmt-check", "deps-check", "vet", "lint", "actions-lint"] },
 ]
 
 [tasks.check]
 description = "Format and run all quality checks"
 run = [
   { task = "fmt" },
-  { tasks = ["vet", "test", "lint", "actions-lint"] },
+  { tasks = ["deps-check", "vet", "test", "lint", "actions-lint"] },
 ]
 
 [tasks.build-windows]
@@ -52,6 +56,7 @@ run_windows = 'go build -ldflags "-X main.Version=%usage_version%" -o notify-sen
 
 [tasks.release]
 description = "Create and publish a GitHub release"
+depends = ["test", "quality", "test-wrapper"]
 confirm = "Create and publish a new GitHub release?"
 usage = '''
 arg "<version>" help="release version without the leading v (for example, 1.2.3)"
@@ -82,6 +87,11 @@ gh release create "v${version}" \
   --generate-notes \
   --fail-on-no-commits
 '''
+
+[tasks.test-wrapper]
+description = "Test the WSL notification wrapper"
+shell = "bash -c"
+run = 'bash "{{ config_root }}/tests/wrapper_test.sh"'
 
 [tasks.test-notification]
 description = "Build and send a mise-style WSL notification without installing"
